@@ -46,7 +46,7 @@
   when: install_output is defined
 
 - name: Display fetched installation log
-  local_action: command cat "/tmp/{{ inventory_hostname }}/tmp/newrelic_install.log"
+  local_action: command cat /tmp/newrelic_install.log
   register: install_log_content
   when: install_output is defined
   changed_when: false
