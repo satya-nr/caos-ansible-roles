@@ -1,0 +1,325 @@
+# Visit our schema definition for additional information on this file format.
+# https://github.com/newrelic/open-install-library/blob/main/docs/recipe-spec/recipe-spec.md#schema-definition
+
+name: infrastructure-agent-installer
+displayName: Infrastructure Agent
+description: New Relic install recipe for the Infrastructure agent
+repository: https://github.com/newrelic/infrastructure-agent
+
+installTargets:
+  - type: host
+    os: linux
+    platformFamily: rhel
+
+keywords:
+  - Infrastructure
+  - Agent
+  - CentOS 7
+  - CentOS 8
+  - RHEL 7
+  - RHEL 8
+  - RHEL 9
+  - RHEL 10
+
+processMatch: []
+
+# DEPRECATED! Use `validationUrl` instead.
+validationNrql: "SELECT count(*) from SystemSample where hostname like '{{.HOSTNAME}}' FACET entityGuid SINCE 5 minutes ago"
+validationUrl: "http://localhost:18003/v1/status/entity"
+
+preInstall:
+  requireAtDiscovery: |
+      IS_DOCKER_CONTAINER_CGROUP=$(grep 'docker\|lxc' /proc/1/cgroup | wc -l)
+      if [ $IS_DOCKER_CONTAINER_CGROUP -gt 0 ] ; then
+        echo "docker detected with cgroup, unsupported" >&2
+        exit 131
+      fi
+      IS_DOCKER_CONTAINER_ENVIRON=$(grep container=lxc /proc/1/environ | wc -l)
+      if [ $IS_DOCKER_CONTAINER_ENVIRON -gt 0 ] ; then
+        echo "docker detected with environ, unsupported" >&2
+        exit 131
+      fi
+      if [[ -f /.dockerenv ]] ; then
+        echo "docker detected with .dockerenv, unsupported" >&2
+        exit 131
+      fi
+      IS_WSL_CONTAINER=$(grep -i 'Microsoft' /proc/version | wc -l)
+      if [ $IS_WSL_CONTAINER -gt 0 ] ; then
+        echo "microsoft Windows Subsystem for Linux for infra detected, unsupported" >&2
+        exit 131
+      fi
+      exit 0
+
+install:
+  version: "3"
+  silent: true
+
+  tasks:
+    default:
+      cmds:
+        - task: write_recipe_metadata
+        - task: assert_pre_req
+        - task: cleanup
+        - task: setup_license
+        - task: setup_proxy
+        - task: install_infra
+        - task: restart
+        - task: assert_agent_status_ok
+        - task: get_infra_key
+
+    write_recipe_metadata:
+      cmds:
+        - |
+          echo '{"Metadata":{"CapturedCliOutput":"true"}}' | tee {{.NR_CLI_OUTPUT}} > /dev/null
+
+    assert_pre_req:
+      cmds:
+        - |
+          IS_ROOT_OR_SUDO=$([ ! -z "$SUDO_USER" ] || [ $(whoami) = "root" ] && echo "true" || echo "false") # Assert root or sudo user
+          if [ "$IS_ROOT_OR_SUDO" = "false" ]; then
+            echo "This newrelic install must be run under sudo or root" >&2
+            exit 3
+          fi      
+        - |
+          IS_GREP_INSTALLED=$(which grep | wc -l)
+          if [ $IS_GREP_INSTALLED -eq 0 ] ; then
+            echo "grep is required to run the newrelic install. Please install grep and re-run the installation." >&2
+            exit 10
+          fi
+        - |
+          IS_SED_INSTALLED=$(which sed | wc -l)
+          if [ $IS_SED_INSTALLED -eq 0 ] ; then
+            echo "sed is required to run the newrelic install. Please install sed and re-run the installation." >&2
+            exit 11
+          fi
+        - |
+          IS_AWK_INSTALLED=$(which awk | wc -l)
+          if [ $IS_AWK_INSTALLED -eq 0 ] ; then
+            echo "awk is required to run the newrelic install. Please install awk and re-run the installation." >&2
+            exit 12
+          fi
+        - |
+          IS_CAT_INSTALLED=$(which cat | wc -l)
+          if [ $IS_CAT_INSTALLED -eq 0 ] ; then
+            echo "cat is required to run the newrelic install. Please install cat and re-run the installation." >&2
+            exit 13
+          fi
+        - |
+          IS_TEE_INSTALLED=$(which tee | wc -l)
+          if [ $IS_TEE_INSTALLED -eq 0 ] ; then
+            echo "tee is required to run the newrelic install. Please install tee and re-run the installation." >&2
+            exit 14
+          fi
+        - |
+          IS_TOUCH_INSTALLED=$(which touch | wc -l)
+          if [ $IS_TOUCH_INSTALLED -eq 0 ] ; then
+            echo "touch is required to run the newrelic install. Please install touch and re-run the installation." >&2
+            exit 15
+          fi
+        - |
+          ARCH=$(uname -m)
+          REPO_URL="http://nr-downloads-ohai-staging.s3-website-us-east-1.amazonaws.com/testing-pre-releases/satya-test/infrastructure_agent/linux/yum/el/10/$ARCH/newrelic-infra.repo"
+          IS_INFRA_AVAILABLE=$(curl -Is $REPO_URL | grep " 2[0-9][0-9] " | wc -l)
+          if [ $IS_INFRA_AVAILABLE -eq 0 ] ; then
+            echo "there is no newrelic infrastructure agent available for the distribution '{{.DISTRO_VERSION}}'." >&2
+            exit 21
+          fi
+      vars:
+        DISTRO_VERSION:
+          sh: |
+            rpm -E %{rhel}
+
+    cleanup:
+      cmds:
+        - |
+          rm -rf /var/db/newrelic-infra/data 2>/dev/null
+
+    setup_license:
+      cmds:
+        - |
+          if [ -f /etc/newrelic-infra.yml ]; then
+            sed -i "/^staging/d" /etc/newrelic-infra.yml
+            sed -i "/^enable_process_metrics/d" /etc/newrelic-infra.yml
+            sed -i "/^status_server_enabled/d" /etc/newrelic-infra.yml
+            sed -i "/^status_server_port/d" /etc/newrelic-infra.yml
+            sed -i "/^license_key/d" /etc/newrelic-infra.yml
+            sed -i '/^custom_attributes:/,/^\S/{ /^\S/!d }' /etc/newrelic-infra.yml
+            sed -i '/^custom_attributes:/d' /etc/newrelic-infra.yml                        
+          else
+            touch /etc/newrelic-infra.yml
+          fi
+        - |
+          if [ $(echo {{.NEW_RELIC_REGION}} | grep -i staging | wc -l) -gt 0 ]; then
+            echo 'staging: true' >> /etc/newrelic-infra.yml
+          fi
+          echo 'enable_process_metrics: true' >> /etc/newrelic-infra.yml
+          echo 'status_server_enabled: true' >> /etc/newrelic-infra.yml
+          echo 'status_server_port: 18003' >> /etc/newrelic-infra.yml
+          echo 'license_key: {{.NEW_RELIC_LICENSE_KEY}}' >> /etc/newrelic-infra.yml
+          echo '{{.NRIA_CUSTOM_ATTRIBUTES}}' >> /etc/newrelic-infra.yml
+
+    setup_proxy:
+      cmds:
+        - |
+          if [ ! -z "$HTTPS_PROXY" ]; then
+            sed -i "/^proxy/d" /etc/newrelic-infra.yml
+            echo 'proxy: {{.HTTPS_PROXY}}' >> /etc/newrelic-infra.yml
+
+            if ! grep -q '^proxy=' /etc/dnf/dnf.conf; then
+              echo "************************************************************"
+              echo "WARNING: proxy settings not detected in your dnf config"
+              echo "If installation fails with a timeout, add the following line to /etc/dnf/dnf.conf and retry:"
+              echo "proxy={{.HTTPS_PROXY}}"
+              echo "************************************************************"
+            fi
+          fi
+
+    install_infra:
+      cmds:
+        - |
+          ARCH=$(uname -m)
+          REPO_URL="http://nr-downloads-ohai-staging.s3-website-us-east-1.amazonaws.com/testing-pre-releases/satya-test/infrastructure_agent/linux/yum/el/10/$ARCH/newrelic-infra.repo"
+          IS_NEWRELIC_AVAILABLE=$(curl -Ls $REPO_URL | grep "\[newrelic-infra\]" | wc -l)
+          if [ $IS_NEWRELIC_AVAILABLE -eq 0 ] ; then
+            echo "newrelic infrastructure agent is not available for this architecture "$ARCH". See our documentation for installing manually https://docs.newrelic.com/docs/using-new-relic/cross-product-functions/install-configure/install-new-relic" >&2
+            exit 131
+          fi
+
+          # Install specific version if provided, otherwise install latest
+          AGENT_VERSION={{.INFRASTRUCTURE_AGENT_INSTALLER_VERSION}}
+          VERSION_SUFFIX=""
+          if [ -n "$AGENT_VERSION" ]; then
+            VERSION_SUFFIX="-$AGENT_VERSION"
+          fi
+          
+          # Check NEW_RELIC_FIPS_ENABLED flag
+          if [ "${NEW_RELIC_FIPS_ENABLED:-false}" = "true" ]; then
+            echo "FIPS mode enabled. Installing newrelic-infra-fips${VERSION_SUFFIX}..."
+            curl -s $REPO_URL -o /etc/yum.repos.d/newrelic-infra.repo
+            sed -i 's|/testing-pre-releases/satya-test/testing-pre-releases/satya-test/|/testing-pre-releases/satya-test/|' /etc/yum.repos.d/newrelic-infra.repo
+            yum -y -q makecache --disablerepo='*' --enablerepo='newrelic-infra'
+            yum -y -q install --nogpgcheck newrelic-infra-fips${VERSION_SUFFIX}
+          else
+            echo "FIPS mode not enabled. Installing newrelic-infra${VERSION_SUFFIX}..."
+            curl -s $REPO_URL -o /etc/yum.repos.d/newrelic-infra.repo
+            sed -i 's|/testing-pre-releases/satya-test/testing-pre-releases/satya-test/|/testing-pre-releases/satya-test/|' /etc/yum.repos.d/newrelic-infra.repo
+            yum -y -q makecache --disablerepo='*' --enablerepo='newrelic-infra'
+            yum -y -q install --nogpgcheck newrelic-infra${VERSION_SUFFIX} 
+          fi
+      vars:
+        DISTRO_VERSION:
+          sh: |
+            rpm -E %{rhel}
+      silent: true
+
+    restart:
+      cmds:
+        - |
+          if [ {{.IS_SYSTEMCTL}} -gt 0 ]; then
+            # For RHEL 10, ensure service is properly enabled before starting
+            if [ "{{.DISTRO_VERSION}}" = "10" ]; then
+              systemctl enable newrelic-infra
+              systemctl start newrelic-infra
+            else
+              systemctl restart newrelic-infra
+            fi
+          else 
+            if [ {{.IS_INITCTL}} -gt 0 ]; then
+              if [ "{{.DISTRO_VERSION}}" = "10" ]; then
+                initctl start newrelic-infra
+              else
+                initctl restart newrelic-infra
+              fi
+            else
+              if [ "{{.DISTRO_VERSION}}" = "10" ]; then
+                /etc/init.d/newrelic-infra start
+              else
+                /etc/init.d/newrelic-infra restart
+              fi
+            fi
+          fi
+      vars:
+        IS_SYSTEMCTL:
+          sh: command -v systemctl | wc -l
+        IS_INITCTL:
+          sh: command -v initctl | wc -l
+        DISTRO_VERSION:
+          sh: |
+            rpm -E %{rhel}
+
+    assert_agent_status_ok:
+      cmds:
+        - |
+          infra_present(){
+            INFRA_PRESENT=$(ps aux | grep newrelic-infra$ | wc -l)
+            [[ $INFRA_PRESENT -gt 0 ]]
+            return
+          }
+
+          MAX_RETRIES=150
+          TRIES=0
+          echo "Running agent status check attempt..."
+          # wait for status endpoint to be ready
+          while [ $TRIES -lt $MAX_RETRIES ]; do
+            ((TRIES++))
+            statusCheckOutput=$(curl http://localhost:18003/v1/status/errors -s)
+            if [ "$statusCheckOutput" == "{}" ]; then
+              echo "Agent status check ok."
+              break
+            else
+              if [ "$statusCheckOutput" == "" ]; then
+                if [ "$TRIES" -eq "$MAX_RETRIES" ]; then
+                  # Process-based validation attempt
+                  if infra_present; then
+                    echo "detected newrelic-infra process running"
+                    exit 0
+                  fi
+                  echo "infra-agent status endpoint not available" >&2
+                  exit 32
+                fi
+              else
+                if [ "$TRIES" -eq "$MAX_RETRIES" ]; then
+                  # Process-based validation attempt
+                  if infra_present; then
+                    echo "detected newrelic-infra process running"
+                    exit 0
+                  fi
+                  echo "infra-agent status check not healthy: $statusCheckOutput" >&2
+                  exit 33
+                fi
+              fi
+            fi
+
+            sleep 2
+          done
+
+    get_infra_key:
+      cmds:
+        - |
+          MAX_RETRIES=150
+          TRIES=0
+          while [ $TRIES -lt $MAX_RETRIES ]; do
+            ((TRIES++))
+            AGENT_STATUS=$(curl http://localhost:18003/v1/status/errors -s)
+            if [ "$AGENT_STATUS" == "{}" ]; then
+              INFRA_KEY=$(curl http://localhost:18003/v1/status/entity -s | tr -d {}\" | sed -e 's/^.*key://')
+              if [ ! -z "$INFRA_KEY" ]; then
+                echo "Infra key: $INFRA_KEY"
+                echo "{\"Metadata\":{\"INFRA_KEY\":\"$INFRA_KEY\"}}" | tee -a {{.NR_CLI_OUTPUT}} > /dev/null
+                break
+              fi
+            fi
+            sleep 1
+          done
+
+          if [ -z "$INFRA_KEY" ]; then
+            echo "empty infrastructure agent key"
+          fi
+
+postInstall:
+  info: |2
+      ⚙️  The Infrastructure Agent configuration file can be found in /etc/newrelic-infra.yml
+      Edit this file to make changes or configure advanced features for the agent. See the docs for options:
+      https://docs.newrelic.com/docs/infrastructure/install-infrastructure-agent/configuration/infrastructure-agent-configuration-settings
+      
+      Note: Process monitoring has been enabled by default - all other config options are left to the user.
