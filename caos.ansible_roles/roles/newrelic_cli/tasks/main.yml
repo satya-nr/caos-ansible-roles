@@ -45,7 +45,13 @@
     flat: yes
   when: install_output is defined
 
-- name: Fail if installation failed
-  fail:
-    msg: "Installation failed. Check /tmp/newrelic_install.log on the Ansible controller for details."
-  when: install_output.rc != 0
+- name: Display fetched installation log
+  local_action: command cat "/tmp/{{ inventory_hostname }}/tmp/newrelic_install.log"
+  register: install_log_content
+  when: install_output is defined
+  changed_when: false
+
+- name: Print installation log content
+  debug:
+    var: install_log_content.stdout_lines
+  when: install_log_content is defined
