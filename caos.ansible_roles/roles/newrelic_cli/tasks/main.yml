@@ -17,7 +17,8 @@
 
 - name: Download custom recipe
   get_url:
-    url: https://raw.githubusercontent.com/satya-nr/caos-ansible-roles/refs/heads/rhel10_log_rotate_support/caos.ansible_roles/roles/newrelic_cli/files/custom-infra-agent-recipe.yml
+    # url: https://raw.githubusercontent.com/satya-nr/caos-ansible-roles/refs/heads/rhel10_log_rotate_support/caos.ansible_roles/roles/newrelic_cli/files/custom-infra-agent-recipe.yml
+    url: https://raw.githubusercontent.com/satya-nr/caos-ansible-roles/9e124596c7701a1b1ca5d9ea0744b0fdade96e5b/caos.ansible_roles/roles/newrelic_cli/files/custom-infra-agent-recipe.yml
     dest: /tmp/custom-infra-agent-recipe.yml
     mode: '0644'
 
