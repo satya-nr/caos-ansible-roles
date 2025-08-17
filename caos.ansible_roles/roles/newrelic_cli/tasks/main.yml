@@ -39,6 +39,14 @@
     /usr/local/bin/newrelic install -n infrastructure-agent-installer --recipePath /tmp/custom-infra-agent-recipe.yml --debug -y
   register: agent_install_result
 
-- name: Print agent install logs
+- name: Print agent install stdout
   debug:
     var: agent_install_result.stdout
+
+- name: Print agent install stderr
+  debug:
+    var: agent_install_result.stderr
+
+- name: Print agent install result (full)
+  debug:
+    var: agent_install_result
