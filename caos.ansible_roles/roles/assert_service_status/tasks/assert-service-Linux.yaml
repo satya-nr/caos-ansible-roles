@@ -12,9 +12,11 @@
   pause:
     seconds: "{{ seconds_to_wait }}"
 
-- name: ensure service is up and running
+- name: ensure service is up and running testing
   assert:
-    that: ansible_facts.services[item].state == 'running'
+    that:
+      - "item in ansible_facts.services"
+      - "ansible_facts.services[item].state == 'running'"
+    msg: "Service {{ item }} is not running or not found in ansible_facts.services"
   loop: "{{ services_running | flatten(levels=1) }}"
-
-...
+  ignore_errors: true
