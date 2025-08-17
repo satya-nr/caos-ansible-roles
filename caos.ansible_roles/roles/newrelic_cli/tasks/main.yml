@@ -45,13 +45,7 @@
     flat: yes
   when: install_output is defined
 
-- name: Display fetched installation log
-  local_action: command cat /tmp/newrelic_install.log
-  register: install_log_content
-  when: install_output is defined
-  changed_when: false
-
-- name: Print installation log content
+- name: Print installation log content (testing)
   debug:
-    var: install_log_content.stdout_lines
-  when: install_log_content is defined
+    msg: "{{ lookup('file', '/tmp/newrelic_install.log') }}"
+  when: install_output is defined
