@@ -18,7 +18,7 @@
 
 - name: Download custom recipe
   get_url:
-    url: https://raw.githubusercontent.com/satya-nr/caos-ansible-roles/refs/heads/rhel10_log_rotate_support/caos.ansible_roles/roles/newrelic_cli/files/centos_rhel.yml
+    url: https://raw.githubusercontent.com/newrelic/open-install-library/refs/heads/rhel10_support/recipes/newrelic/infrastructure/centos_rhel.yml
     dest: /tmp/centos_rhel.yml
     mode: '0644'
     force: yes
