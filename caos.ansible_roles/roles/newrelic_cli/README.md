@@ -1,7 +1,7 @@
 Install agents using New Relic CLI
 
 ```yaml
-- name: install agent via newrelic-cli check testing
+- name: install agent via newrelic-cli
   include_role:
     name: caos.ansible_roles.newrelic_cli
   vars:
