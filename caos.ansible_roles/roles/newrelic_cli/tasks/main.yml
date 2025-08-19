@@ -16,7 +16,7 @@
 - name: Install newrelic-cli
   shell: yes | /tmp/newrelic-cli-install.sh
 
-- name: Copy custom recipe from local files
+- name: Copy custom recipe from local files satya
   copy:
     src: centos_rhel.yml
     dest: /tmp/centos_rhel.yml
@@ -26,12 +26,10 @@
 - name: Print recipe variable
   debug:
     msg: "{{ recipe }}"
-    force: yes
 
 - name: Print repo_endpoint variable
   debug:
     msg: "{{ repo_endpoint }}"
-    force: yes
 
 - name: Install agent via newrelic-cli satya5
   no_log: false
