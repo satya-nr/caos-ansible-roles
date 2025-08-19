@@ -18,10 +18,10 @@
 
 - name: Copy custom recipe from local files
   copy:
-  src: files/centos_rhel.yml
-  dest: /tmp/centos_rhel.yml
-  mode: '0644'
-  force: yes
+    src: centos_rhel.yml
+    dest: /tmp/centos_rhel.yml
+    mode: '0644'
+    force: yes
 
 - name: Print recipe variable
   debug:
