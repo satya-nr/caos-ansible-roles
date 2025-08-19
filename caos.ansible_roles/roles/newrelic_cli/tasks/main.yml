@@ -16,20 +16,22 @@
 - name: Install newrelic-cli
   shell: yes | /tmp/newrelic-cli-install.sh
 
-- name: Download custom recipe
-  get_url:
-    url: https://raw.githubusercontent.com/newrelic/open-install-library/refs/heads/rhel10_support/recipes/newrelic/infrastructure/centos_rhel.yml
-    dest: /tmp/centos_rhel.yml
-    mode: '0644'
-    force: yes
+- name: Copy custom recipe from local files
+  copy:
+  src: files/centos_rhel.yml
+  dest: /tmp/centos_rhel.yml
+  mode: '0644'
+  force: yes
 
 - name: Print recipe variable
   debug:
     msg: "{{ recipe }}"
+    force: yes
 
 - name: Print repo_endpoint variable
   debug:
     msg: "{{ repo_endpoint }}"
+    force: yes
 
 - name: Install agent via newrelic-cli satya5
   no_log: false
