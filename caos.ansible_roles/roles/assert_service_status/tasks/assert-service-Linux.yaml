@@ -12,7 +12,7 @@
   pause:
     seconds: "{{ seconds_to_wait }}"
 
-- name: ensure service is up and running satya
+- name: ensure service is up and running satyaone
   assert:
     that: ansible_facts.services[item].state == 'running'
   loop: "{{ services_running | flatten(levels=1) }}"
