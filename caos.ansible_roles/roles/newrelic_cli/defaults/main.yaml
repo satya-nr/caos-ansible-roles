@@ -1,4 +1,4 @@
-repo_endpoint: "http://nr-downloads-ohai-staging.s3-website-us-east-1.amazonaws.com/testing-pre-releases/satya-rhel10/"
+repo_endpoint: "https://download.newrelic.com/"
 recipe: "newrelic-infra"
 region: "STAGING"
 nr_api_key: ""
